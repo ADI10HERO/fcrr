@@ -1,0 +1,33 @@
+version: '2'
+services:
+    rabbit:
+        hostname: rabbit
+        image: rabbitmq:latest
+        container_name: rabbit
+        environment:
+            - RABBITMQ_DEFAULT_USER=admin
+            - RABBITMQ_DEFAULT_PASS=pass
+        ports:
+            - "5673:5672"
+
+    worker:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: app
+        ports:
+          - "5000:5000"
+          - "9001:9001"
+        volumes:
+            - .:/app
+        links:
+            - rabbit
+        depends_on:
+            - rabbit
+    backend:
+        hostname: redis
+        container_name: redis
+        image: redis:latest
+        ports:
+          - "6379:6379"
+
