@@ -4,6 +4,8 @@ from time import sleep, time
 
 import redis
 import hashlib
+import requests
+import os
 
 
 app = Flask(__name__)
@@ -18,35 +20,34 @@ client.conf.update(app.config)
 r = redis.Redis(host='redis')
 
 def generate_ts():
-    return ''.join(str(time.time()).split('.'))
+    return ''.join(str(time()).split('.'))
 
 @client.task(bind=True)
-def long_task(self, url):
-    print("Long task called")
+def long_task(self, task_id, url):
+
     db_contents = {
                     'state' : 'progress', 
                     'url': url, 
                     'message': 'your file is being processed now'
                 }
     r.hmset(task_id, db_contents)
-    r.bgsave()
+    self.update_state(state='PROGRESS', meta={'current': 0, 'total': 1, 'status': "task is in progress"})
 
     try:
         rq = requests.get(url)
         fpath = '{}.wav'.format(generate_ts())
         img_name = fpath.split('.')[0]+'.png'
-        with open('uploads/'+fpath, "wb") as f:
+        with open(fpath, "wb") as f:
             f.write(rq.content)
-        time.sleep(40)
-        os.remove('uploads/'+fpath)
+        sleep(40)
+        os.remove(fpath) # deleting the temp file 
         db_contents = {
                     'state' : 'success', 
                     'url': url, 
-                    'message': 'your file is being processed now'
+                    'message': 'processing completed'
                 }
         r.hmset(task_id, db_contents)
-        r.bgsave()
-        self.update_state(state='PROGRESS', meta={'current': 0, 'total': 1, 'status': "task is in progress"})
+        r.expire(task_id, 60*60*24)
 
     except Exception as e:
         db_contents = {
@@ -54,7 +55,10 @@ def long_task(self, url):
                         'url': url, 
                         'message': e,
                     }
+        # print(e)
         r.hmset(task_id, db_contents)
+        r.expire(task_id, 60*60*24)
+        #return {"task-status": "exception"}
 
     return {"Task-Status": "Completed"}
 
@@ -65,14 +69,14 @@ def index():
 
     elif request.method == 'POST':
         url = request.form.get("url")
-        task_id = hashlib.md5(url).hexdigest()
+        task_id = hashlib.md5(url.encode()).hexdigest()
         result = r.hgetall(task_id)
 
-        if result is not None:
+        if result:
             # result exists, i.e previously queried 
-            print(result)
             msg = str(r.hget(task_id, "state"))
-            return render_template('index.html', message = msg)
+            if msg != "Failed":
+                return render_template('index.html', message = msg)
 
         # create task with task_id as id
         db_contents = {
@@ -81,10 +85,9 @@ def index():
                         'message': 'your file is accepted, will be processed soon'
                     }
         r.hmset(task_id, db_contents)
-        r.bgsave()
 
         # finally call the long task 
-        task = long_task.apply_async(url)
+        longtask = long_task.delay(task_id, url)
         return render_template('index.html', message = task_id)
 
 @app.route('/status/<id>', methods=['GET'])
@@ -94,12 +97,17 @@ def check_status(id):
     if result is None:
         # result does not exist 
         return render_template('status.html', status = "Not Found", info = "No such task found")
+    
+    task_id = id
+    status = r.hget(task_id, "state").decode('utf-8')
+    info = r.hget(task_id, "message").decode('utf-8')
 
-    print(result)
-    status = str(r.hget(task_id, "state"))
-    info = str(r.hget(task_id, "message"))
+    return render_template('status.html', status = str(status), info = str(info))
 
-    return render_template('status.html', status = status, info = info)
+@app.route('/clear', methods=['GET'])
+def clear():
+    r.flushdb()
+    return "db cleared"
 
 
 if __name__ == '__main__':

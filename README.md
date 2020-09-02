@@ -43,3 +43,8 @@ docker-compose up --build  #this builds the application (recommended)
 ### Note:
 - Minimal application built under 4-5 hrs with no prior knowledge of any component except flask.
 - Contributions highly appreciated.
+
+##### Some URLs for testing:
+- https://file-examples-com.github.io/uploads/2017/11/file_example_WAV_1MG.wav
+- https://file-examples-com.github.io/uploads/2017/11/file_example_WAV_2MG.wav
+

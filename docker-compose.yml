@@ -15,6 +15,7 @@ services:
             context: .
             dockerfile: Dockerfile
         container_name: app
+        image: fcrr_worker
         ports:
           - "5000:5000"
           - "9001:9001"
