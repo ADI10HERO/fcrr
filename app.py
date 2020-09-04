@@ -127,7 +127,7 @@ def index():
 def check_status(id):
     """Route to check the status of the long async task."""
     result = r.hgetall(id)
-    if result is None:
+    if not result:
         # result does not exist
         return render_template('status.html',
                                status="Not Found",
